@@ -1,4 +1,4 @@
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
@@ -26,15 +26,25 @@ if not CHANNEL_ID:
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
-main_menu = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="Программы тренировок")],
-        [KeyboardButton(text="Плейлисты для зала")],
-        [KeyboardButton(text="О боте")],
-    ],
-    resize_keyboard=True,
-    input_field_placeholder="Выбери действие",
-)
+
+def get_main_menu_keyboard():
+    """Главное меню"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="💪 Программы тренировок", callback_data="programs"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎵 Плейлисты для зала", callback_data="playlists"
+                )
+            ],
+            [InlineKeyboardButton(text="ℹ️ О боте", callback_data="about")],
+        ]
+    )
+    return keyboard
 
 
 async def check_subscription(user_id: int) -> bool:
@@ -84,7 +94,7 @@ async def cmd_start(message: types.Message):
     welcome_text = (
         "Добро пожаловать в бота для тренировок!\n" "Выбери нужный раздел в меню ниже:"
     )
-    await message.answer(welcome_text, reply_markup=main_menu)
+    await message.answer(welcome_text, reply_markup=get_main_menu_keyboard())
 
 
 @dp.callback_query(lambda c: c.data == "check_sub")
@@ -98,137 +108,197 @@ async def check_subscription_callback(callback: types.CallbackQuery):
             "Добро пожаловать в бота для тренировок!\n"
             "Выбери нужный раздел в меню ниже:"
         )
-        await callback.message.edit_text(welcome_text)
-        await callback.message.answer("Главное меню:", reply_markup=main_menu)
+        await callback.message.edit_text(
+            welcome_text, reply_markup=get_main_menu_keyboard()
+        )
         await callback.answer("Подписка подтверждена!")
     else:
         await callback.answer("Ты еще не подписан на канал!", show_alert=True)
 
 
 def get_programs_keyboard():
+    """Клавиатура с программами тренировок"""
     buttons = []
-    for name in programs.keys():
-        buttons.append([KeyboardButton(text=name)])
+    program_list = list(programs.keys())
+    for index, name in enumerate(program_list):
+        buttons.append([InlineKeyboardButton(text=name, callback_data=f"prog_{index}")])
 
-    buttons.append([KeyboardButton(text="Назад в меню")])
-
-    return ReplyKeyboardMarkup(
-        keyboard=buttons,
-        resize_keyboard=True,
-        input_field_placeholder="Выбери программу тренировок",
+    buttons.append(
+        [InlineKeyboardButton(text="🔙 Назад в меню", callback_data="back_to_main")]
     )
 
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def get_playlists_keyboard():
+
+def get_playlist_keyboard():
+    """Клавиатура с плейлистами"""
     buttons = []
-    for name in playlist.keys():
-        buttons.append([KeyboardButton(text=name)])
+    playlist_list = list(playlist.keys())
 
-    buttons.append([KeyboardButton(text="Назад в меню")])
+    for index, name in enumerate(playlist_list):
+        buttons.append(
+            [InlineKeyboardButton(text=name, callback_data=f"playlist_{index}")]
+        )
 
-    return ReplyKeyboardMarkup(
-        keyboard=buttons,
-        resize_keyboard=True,
-        input_field_placeholder="Выбери плейлист",
+    buttons.append(
+        [InlineKeyboardButton(text="🔙 Назад в меню", callback_data="back_to_main")]
     )
 
-
-back_button = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [InlineKeyboardButton(text="Назад в меню", callback_data="back_to_main")]
-    ]
-)
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-@dp.message(lambda message: message.text == "Программы тренировок")
-async def show_programs_menu(message: types.Message):
-    is_subscribed = await check_subscription(message.from_user.id)
+@dp.callback_query(F.data == "back_to_main")
+async def back_to_main_menu(callback: types.CallbackQuery):
+    """Возврат в главное меню"""
+    is_subscribed = await check_subscription(callback.from_user.id)
+
     if not is_subscribed:
-        await message.answer(
-            "Для доступа к функциям бота необходимо подписаться на канал:",
+        await callback.message.edit_text(
+            "⚠️ Для доступа к боту необходимо подписаться на канал:",
             reply_markup=get_subscription_keyboard(),
         )
+        await callback.answer()
         return
 
-    keyboard = get_programs_keyboard()
-    await message.answer("Выбери программу тренировок:", reply_markup=keyboard)
+    await callback.message.edit_text(
+        "📋 Главное меню:", reply_markup=get_main_menu_keyboard()
+    )
+    await callback.answer()
 
 
-@dp.message(lambda message: message.text == "Плейлисты для зала")
-async def show_playlists_menu(message: types.Message):
-    is_subscribed = await check_subscription(message.from_user.id)
+@dp.callback_query(F.data == "programs")
+async def show_programs_menu(callback: types.CallbackQuery):
+    """Показать меню программ"""
+    is_subscribed = await check_subscription(callback.from_user.id)
+
     if not is_subscribed:
-        await message.answer(
+        await callback.message.edit_text(
             "⚠️ Для доступа к функциям бота необходимо подписаться на канал:",
             reply_markup=get_subscription_keyboard(),
         )
+        await callback.answer()
         return
 
-    keyboard = get_playlists_keyboard()
-    await message.answer("Выбери плейлист:", reply_markup=keyboard)
+    await callback.message.edit_text(
+        "💪 Выбери программу тренировок:", reply_markup=get_programs_keyboard()
+    )
+    await callback.answer()
 
 
-@dp.message(lambda message: message.text == "О боте")
-async def about_bot(message: types.Message):
-    is_subscribed = await check_subscription(message.from_user.id)
+@dp.callback_query(F.data == "playlists")
+async def show_playlist_menu(callback: types.CallbackQuery):
+    """Показать меню плейлистов"""
+    is_subscribed = await check_subscription(callback.from_user.id)
+
     if not is_subscribed:
-        await message.answer(
-            "⚠️ Для доступа к боту необходимо подписаться на канал:",
+        await callback.message.edit_text(
+            "⚠️ Для доступа к функциям бота необходимо подписаться на канал:",
             reply_markup=get_subscription_keyboard(),
         )
+        await callback.answer()
+        return
+
+    await callback.message.edit_text(
+        "🎵 Выбери плейлист:", reply_markup=get_playlist_keyboard()
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "about")
+async def about_bot(callback: types.CallbackQuery):
+    """Информация о боте"""
+    is_subscribed = await check_subscription(callback.from_user.id)
+
+    if not is_subscribed:
+        await callback.message.edit_text(
+            "⚠️ Для доступа к функциям бота необходимо подписаться на канал:",
+            reply_markup=get_subscription_keyboard(),
+        )
+        await callback.answer()
         return
 
     about_text = (
-        "О боте:\n"
-        "Этот бот создан для помощи в тренировках\n"
+        "ℹ️ О боте:\n\n"
+        "Этот бот создан для помощи в тренировках.\n"
         "Здесь ты найдешь:\n\n"
-        "1. Программы тренировок\n"
-        "2. Плейлисты для зала\n\n"
-        "Используй меню для навигации по боту\n\n"
-        "Для возврата в главное меню используй команду: /start"
+        "💪 Программы тренировок\n"
+        "🎵 Плейлисты для зала\n\n"
+        "Используй кнопки для навигации по боту."
     )
-    await message.answer(about_text)
+
+    back_button = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Назад в меню", callback_data="back_to_main")]
+        ]
+    )
+
+    await callback.message.edit_text(about_text, reply_markup=back_button)
+    await callback.answer()
 
 
-@dp.message(lambda message: message.text in programs.keys())
-async def send_program_message(message: types.Message):
-    is_subscribed = await check_subscription(message.from_user.id)
+@dp.callback_query(F.data.startswith("prog_"))
+async def send_program(callback: types.CallbackQuery):
+    """Отправка программы тренировок"""
+    is_subscribed = await check_subscription(callback.from_user.id)
+
     if not is_subscribed:
-        await message.answer(
+        await callback.message.edit_text(
             "⚠️ Для доступа к программам необходимо подписаться на канал:",
             reply_markup=get_subscription_keyboard(),
         )
+        await callback.answer()
         return
 
-    program_text = programs[message.text]
-    await message.answer(program_text, reply_markup=get_programs_keyboard())
+    index = int(callback.data.split("_")[1])
+    program_list = list(programs.keys())
+
+    if index < len(program_list):
+        program_name = program_list[index]
+        program_text = programs[program_name]
+        await callback.message.edit_text(
+            f"💪 {program_name}\n\n{program_text}", reply_markup=get_programs_keyboard()
+        )
+    else:
+        await callback.answer("❌ Программа не найдена!", show_alert=True)
+        return
+
+    await callback.answer()
 
 
-@dp.message(lambda message: message.text in playlist.keys())
-async def send_playlist_message(message: types.Message):
-    is_subscribed = await check_subscription(message.from_user.id)
+@dp.callback_query(F.data.startswith("playlist_"))
+async def send_playlist(callback: types.CallbackQuery):
+    is_subscribed = await check_subscription(callback.from_user.id)
+
     if not is_subscribed:
-        await message.answer(
+        await callback.message.edit_text(
             "⚠️ Для доступа к плейлистам необходимо подписаться на канал:",
             reply_markup=get_subscription_keyboard(),
         )
+        await callback.answer()
         return
 
-    playlist_link = playlist[message.text]
-    await message.answer(playlist_link, reply_markup=get_playlists_keyboard())
+    index = int(callback.data.split("_")[1])
+    playlist_list = list(playlist.keys())
 
+    if index < len(playlist_list):
+        playlist_name = playlist_list[index]
+        playlist_link = playlist[playlist_name]
 
-@dp.message(lambda message: message.text == "Назад в меню")
-async def back_to_main_menu(message: types.Message):
-    is_subscribed = await check_subscription(message.from_user.id)
-    if not is_subscribed:
-        await message.answer(
-            "⚠️ Для доступа к боту необходимо подписаться на канал:",
-            reply_markup=get_subscription_keyboard(),
+        link_button = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🎵 Открыть плейлист", url=playlist_link)],
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="playlists")],
+            ]
         )
+
+        await callback.message.edit_text(
+            f"🎵 {playlist_name}", reply_markup=link_button
+        )
+    else:
+        await callback.answer("❌ Плейлист не найден!", show_alert=True)
         return
 
-    await message.answer("Возврат в главное меню:", reply_markup=main_menu)
+    await callback.answer()
 
 
 async def keep_alive():
