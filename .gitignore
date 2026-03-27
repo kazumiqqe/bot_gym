@@ -1,5 +1,7 @@
 .env
 *.pyc
+*.db
+*.bat
 __pycache__/
 venv/
 env/
