@@ -35,18 +35,30 @@ class AddWorkout(StatesGroup):
     waiting_for_reps = State()
     waiting_for_weight = State()
 
+class GenerateProgram(StatesGroup):
+    waiting_for_experience = State()
+    waiting_for_days = State()
+    waiting_for_split = State()
+    waiting_for_weak_points = State()
+    waiting_for_intensity = State()
+    waiting_for_equipment = State()
 
 def get_main_menu_keyboard():
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="💪 Программы тренировок", callback_data="programs"
+                    text="💪 Мои программы тренировок", callback_data="programs"
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="🎵 Плейлисты для зала", callback_data="playlists"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🤖 Сгенерировать программу", callback_data="generate_program"
                 )
             ],
             [
@@ -139,6 +151,62 @@ def get_playlist_keyboard():
     )
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+def get_experience_keyboard():
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🟢 Новичок (< 6 мес)", callback_data="exp_beginner")],
+            [InlineKeyboardButton(text="🟡 Средний (6-12 мес)", callback_data="exp_intermediate")],
+            [InlineKeyboardButton(text="🔴 Продвинутый (> 1 года)", callback_data="exp_advanced")],
+            [InlineKeyboardButton(text="🔙 Назад в меню", callback_data="back_to_main")]
+        ]
+    )
+    return keyboard
+
+def get_days_keyboard():
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="2 дня", callback_data="days_2"), InlineKeyboardButton(text="3 дня", callback_data="days_3")],
+            [InlineKeyboardButton(text="4 дня", callback_data="days_4"), InlineKeyboardButton(text="5 дней", callback_data="days_5")],
+            [InlineKeyboardButton(text="6 дней", callback_data="days_6")],
+            [InlineKeyboardButton(text="🔙 Назад в меню", callback_data="back_to_main")]
+        ]
+    )
+    return keyboard
+
+def get_split_keyboard():
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Full Body (всё тело)", callback_data="split_fullbody")],
+            [InlineKeyboardButton(text="Верх / Низ", callback_data="split_upper_lower")],
+            [InlineKeyboardButton(text="Сплит (по группам мышц)", callback_data="split_split")],
+            [InlineKeyboardButton(text="🔙 Назад в меню", callback_data="back_to_main")]
+        ]
+    )
+    return keyboard
+
+def get_weak_points_keyboard():
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Руки", callback_data="weak_arms"),
+             InlineKeyboardButton(text="Плечи", callback_data="weak_shoulders")],
+            [InlineKeyboardButton(text="Грудь", callback_data="weak_chest"),
+             InlineKeyboardButton(text="Спина", callback_data="weak_back")],
+            [InlineKeyboardButton(text="Ноги", callback_data="weak_legs")],
+            [InlineKeyboardButton(text="🔙 Назад в меню", callback_data="back_to_main")]
+        ]
+    )
+    return keyboard
+
+def get_intensity_keyboard():
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="2 подхода (лёгкая)", callback_data="intensity_2")],
+            [InlineKeyboardButton(text="3 подхода (средняя)", callback_data="intensity_3")],
+            [InlineKeyboardButton(text="4 подхода (тяжёлая)", callback_data="intensity_4")],
+            [InlineKeyboardButton(text=" Назад в меню", callback_data="back_to_main")]
+        ]
+    )
+    return keyboard
 
 @dp.callback_query(F.data == "back_to_main")
 async def back_to_main_menu(callback: types.CallbackQuery):
@@ -166,7 +234,7 @@ async def show_playlist_menu(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "about")
 async def about_bot(callback: types.CallbackQuery):
-    about_text = "ℹ️ О боте:\n\nЭтот бот создан для помощи в тренировках.\n\n💪 Программы тренировок\n🎵 Плейлисты для зала\n📊 Прогресс тренировок"
+    about_text = "ℹ️ О боте:\n\nЭтот бот создан для помощи в тренировках.\n\n💪 Мои личные программы тренировок\n🎵 Плейлисты для зала\n🤖 Генератор программ тренировок\n📊 Прогресс тренировок"
     await callback.message.edit_text(
         about_text,
         reply_markup=InlineKeyboardMarkup(
@@ -181,6 +249,128 @@ async def about_bot(callback: types.CallbackQuery):
     )
     await callback.answer()
 
+@dp.callback_query(F.data == "generate_program")
+async def generate_program_start(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.edit_text(
+        "🤖 *Генератор программ тренировок*\n\n"
+        "Давай подберём идеальную программу под тебя.\n\n"
+        "1️⃣ Какой у тебя уровень подготовки?",
+        parse_mode="Markdown",
+        reply_markup=get_experience_keyboard()
+    )
+    await state.set_state(GenerateProgram.waiting_for_experience)
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("exp_"))
+async def process_experience(callback: types.CallbackQuery, state: FSMContext):
+    exp_map = {
+        "exp_beginner": "Новичок (< 6 мес)",
+        "exp_intermediate": "Средний (6-12 мес)",
+        "exp_advanced": "Продвинутый (> 1 года)"
+    }
+
+    experience = exp_map.get(callback.data, "Неизвестно")
+    await state.update_data(experience=experience)
+    await callback.message.edit_text(
+        f"✅ Уровень: *{experience}*\n\n"
+        f"2️⃣ Сколько дней в неделю ты готов тренироваться?",
+        parse_mode="Markdown",
+        reply_markup=get_days_keyboard()
+    )
+    await callback.answer()
+    await state.set_state(GenerateProgram.waiting_for_days)
+
+@dp.callback_query(F.data.startswith("days_"))
+async def time_days(callback: types.CallbackQuery, state: FSMContext):
+    days_map = {
+        "days_2": "2 дня",
+        "days_3": "3 дня",
+        "days_4": "4 дня",
+        "days_5": "5 дней",
+        "days_6": "6 дней"
+    }
+    
+    days = days_map.get(callback.data, "Неизвестно")
+    await state.update_data(days=days)
+    await callback.message.edit_text(
+        f"✅ Дней в неделю: *{days}*\n\n"
+        f"3️⃣ Какой тип тренировки предпочитаешь?",
+        parse_mode="Markdown",
+        reply_markup=get_split_keyboard()
+    )
+    await callback.answer()
+    await state.set_state(GenerateProgram.waiting_for_split)
+
+@dp.callback_query(F.data.startswith("split"))
+async def type_split(callback: types.CallbackQuery, state: FSMContext):
+    split_map = {
+        "split_fullbody": "Фуллбади",
+        "split_upper_lower": "Вверх/Низ",
+        "split_split": "Сплит"
+    }
+    
+    split = split_map.get(callback.data, "Неизвестно")
+    await state.update_data(split=split)
+    await callback.message.edit_text(
+        f"✅ Тип: *{split}*\n\n"
+        f"4️⃣ Какие мышцы отстают? (напиши текстом, например: грудь, плечи)",
+        parse_mode="Markdown",
+        reply_markup=get_weak_points_keyboard()
+    )
+    await callback.answer()
+    await state.set_state(GenerateProgram.waiting_for_weak_points)
+
+@dp.callback_query(F.data.startswith("weak_"))
+async def weak_muscles(callback: types.CallbackQuery, state: FSMContext):
+    weak_map = {
+        "weak_arms": "Руки",
+        "weak_shoulders": "Плечи",
+        "weak_chest": "Грудь",
+        "weak_back": "Спина",
+        "weak_legs": "Ноги"
+    }
+
+    weak = weak_map.get(callback.data, "Неизвестно")
+    await state.update_data(weak=weak)
+
+    await callback.message.edit_text(
+        f"✅ Отстающие мышцы: *{weak}*\n\n"
+        f"5️⃣ Сколько подходов ты обычно делаешь на упражнение?",
+        parse_mode="Markdown",
+        reply_markup=get_intensity_keyboard()
+    )
+    await callback.answer()
+    await state.set_state(GenerateProgram.waiting_for_intensity)
+
+@dp.callback_query(F.data.startswith("intensity_"))
+async def process_intensity(callback: types.CallbackQuery, state: FSMContext):
+    intensity_map = {
+        "intensity_2": "2 подхода",
+        "intensity_3": "3 подхода",
+        "intensity_4": "4 подхода",
+    }
+    
+    intensity = intensity_map.get(callback.data, "Неизвестно")
+    await state.update_data(intensity=intensity)
+    
+    await callback.message.edit_text(
+        f"✅ Интенсивность: *{intensity}*\n\n"
+        f"6️⃣ Какие тренажеры и снаряды есть в твоем зале? (напиши просто текстом, например: штанга, гантели, турник, брусья)",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+    await state.set_state(GenerateProgram.waiting_for_equipment)
+
+@dp.message(GenerateProgram.waiting_for_equipment)
+async def process_equipment(message: types.Message, state: FSMContext):
+    equipment = message.text
+    await state.update_data(equipment=equipment)
+
+    data = await state.get_data()
+    await state.clear()
+    await message.answer("⏳ ИИ анализирует твой зал и составляет программу... Подожди пару секунд.")
+    await generate_program(message, data)
 
 @dp.callback_query(F.data == "progress")
 async def show_progress_menu(callback: types.CallbackQuery):
@@ -367,6 +557,66 @@ async def show_exercise_history(callback: types.CallbackQuery):
     )
     await callback.answer()
 
+async def generate_program(message: types.Message, data: dict):
+    experience = data.get('experience')
+    days = data.get('days')
+    split = data.get('split')
+    weak = data.get('weak')
+    intensity = data.get('intensity')
+    equipment = data.get('equipment')
+
+    prompt = f"""
+    Ты профессиональный фитнес-тренер. Вот примеры моих авторских программ тренировок:
+
+    === ПРИМЕР 1 ===
+    {programs['программа тренировок вверх низ (сокращенные подходы)']}
+
+    Изучи программу. Обрати внимание на:
+    - Подбор упражнений
+    - Количество подходов и повторений
+    - Распределение нагрузки по мышцам
+
+    Теперь составь НОВУЮ программу для пользователя с учётом его параметров:
+
+    ПАРАМЕТРЫ:
+    - Уровень подготовки: {experience}
+    - Дней в неделю: {days}
+    - Тип сплита: {split}
+    - Отстающие мышцы: {weak}
+    - Интенсивность (количество подходов): {intensity}
+    - Доступное оборудование: {equipment}
+
+    ТРЕБОВАНИЯ:
+    1. Отстающие мышцы ставь в начало тренировки
+    2. Учитывай только доступное оборудование
+    3. Используй {intensity} на каждое упражнение (как указано в параметрах).
+    4. Форматируй ответ СТРОГО по шаблону ниже:
+
+    ШАБЛОН ОФОРМЛЕНИЯ:
+    💪 Программа тренировок: {split}
+
+    [День 1: Название группы мышц]
+    1. [Упражнение] - {intensity} x [повторения]
+    2. [Упражнение] - {intensity} x [повторения]
+
+    [День 2: Название группы мышц]
+    ...
+    
+    Отвечай ТОЛЬКО программой, без лишних вступлений и объяснений.
+    """
+    
+    from groq import Groq
+    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1500,
+    )
+    
+    program_text = response.choices[0].message.content
+    
+    await message.answer(program_text, parse_mode="Markdown")
 
 @dp.callback_query(F.data == "ai_advice")
 async def ai_advice(callback: CallbackQuery):
